@@ -30,9 +30,9 @@
 
 <script>
 // ===== ตั้งค่า =====
-var BROKER = "mqtt-dashboard.com";
+var BROKER = "broker.hivemq.com";
 var PORT = 8884;                          // WebSocket แบบเข้ารหัส
-var BASE_TOPIC = "/slot";  // ช่อง 1 = /slot1
+var BASE_TOPIC = "Smart_Parking/";  // ช่อง 1 = /slot1
 var SLOT_COUNT = 3;                       // เพิ่มลดจำนวนช่องที่นี่
 
 // ===== สร้างช่องจอด =====
@@ -55,9 +55,25 @@ function render(n) {
   bay.className = "bay " + s;
   bay.querySelector(".label").textContent =
     s === "free" ? "ว่าง" : s === "busy" ? "ไม่ว่าง" : "รอข้อมูล";
+  updateSummary();
+}
+
+
+var availableFromMsg = null;
+
+function updateSummary() {
   var free = 0, known = 0;
-  for (var k in states) { if (states[k] !== "unknown") known++; if (states[k] === "free") free++; }
-  document.getElementById("freeCount").textContent = known ? free : "-";
+
+  for (var k in states) {
+    if (states[k] !== "unknown") known++;
+    if (states[k] === "free") free++;
+  }
+
+  var shown = availableFromMsg !== null
+    ? availableFromMsg
+    : (known ? free : "-");
+
+  document.getElementById("freeCount").textContent = shown;
 }
 
 // ===== MQTT =====
@@ -80,30 +96,86 @@ function resetSlots() {
 var client = new Paho.MQTT.Client(BROKER, PORT, "web_" + Math.random().toString(16).slice(2, 10));
 
 client.onMessageArrived = function (msg) {
-  var n = parseInt(msg.destinationName.replace(BASE_TOPIC, ""), 10);
-  if (!states.hasOwnProperty(n)) return;
-  var text = msg.payloadString.trim().toLowerCase();
-  states[n] = text === "available" ? "free" : text === "occupied" ? "busy" : "unknown";
-  render(n);
+  console.log("ได้รับ MQTT:", msg.destinationName, msg.payloadString);
+
+  var payload = msg.payloadString.trim().toUpperCase();
+
+  // แยกข้อมูล เช่น P1:OCCUPIED,P2:FREE,AVAILABLE:1
+  var items = payload.split(",");
+
+  items.forEach(function (item) {
+    var parts = item.trim().split(":");
+    if (parts.length !== 2) return;
+
+    var key = parts[0].trim();
+    var value = parts[1].trim();
+
+    // รับจำนวนช่องว่างโดยตรง
+    if (key === "AVAILABLE") {
+      var count = parseInt(value, 10);
+
+      if (!isNaN(count)) {
+        availableFromMsg = Math.max(
+          0,
+          Math.min(SLOT_COUNT, count)
+        );
+        updateSummary();
+      }
+
+      return;
+    }
+
+    // รับสถานะแต่ละช่อง เช่น P1:FREE
+    var match = key.match(/^P(\d+)$/);
+    if (!match) return;
+
+    var n = parseInt(match[1], 10);
+    if (!states.hasOwnProperty(n)) return;
+
+    if (value === "FREE") {
+      states[n] = "free";
+    } else if (value === "OCCUPIED") {
+      states[n] = "busy";
+    } else {
+      states[n] = "unknown";
+    }
+
+    render(n);
+  });
 };
+
 
 client.onConnectionLost = function () {
   setStatus(false, "หลุดการเชื่อมต่อ");
   resetSlots();
 };
 
+
 function connect() {
   btn.disabled = true;
   statusEl.textContent = "กำลังเชื่อมต่อ…";
+
   client.connect({
-    timeout: 5,
-    useSSL: true,                         // จำเป็นเมื่อโฮสต์บน GitHub Pages (https)
-    onSuccess: function () {
-      setStatus(true, "เชื่อมต่อแล้ว");
-      for (var i = 1; i <= SLOT_COUNT; i++) client.subscribe(BASE_TOPIC + i);
-    },
-    onFailure: function () {
-      setStatus(false, "เชื่อมต่อไม่ได้ กดเชื่อมต่อใหม่");
+    timeout: 10,
+    useSSL: true,
+
+  onSuccess: function () {
+    setStatus(true, "เชื่อมต่อแล้ว");
+    console.log("MQTT CONNECTED");
+
+    client.subscribe("Smart_Parking/", {
+      onSuccess: function () {
+        console.log("SUBSCRIBE SUCCESS: Smart_Parking/");
+      },
+      onFailure: function (err) {
+        console.error("SUBSCRIBE FAILED:", err);
+      }
+    });
+  },
+
+    onFailure: function (err) {
+      console.error("MQTT CONNECT FAILED:", err);
+      setStatus(false, "เชื่อมต่อไม่ได้");
     }
   });
 }
