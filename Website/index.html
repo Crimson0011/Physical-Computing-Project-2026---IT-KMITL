@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ที่จอดรถ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="styles.css">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
+</head>
+<body>
+  <nav>
+  <a href="index.html" aria-current="page">สถานะที่จอด</a>
+  <a href="info.html">ข้อมูล</a>
+</nav>
+<header>
+  <div>
+    <h1>ที่จอดรถ</h1>
+    <div id="summary">ว่าง <b id="freeCount">-</b> จาก <span id="total">0</span> ช่อง</div>
+  </div>
+  <div class="conn">
+    <span id="status">ยังไม่เชื่อมต่อ</span>
+    <button id="toggle" type="button">เชื่อมต่อ</button>
+  </div>
+</header>
+
+<div id="lot"></div>
+<p id="note">สถานะอัปเดตเองเมื่อรถเข้าหรือออก</p>
+
+<script>
+// ===== ตั้งค่า =====
+var BROKER = "mqtt-dashboard.com";
+var PORT = 8884;                          // WebSocket แบบเข้ารหัส
+var BASE_TOPIC = "/slot";  // ช่อง 1 = /slot1
+var SLOT_COUNT = 4;                       // เพิ่มลดจำนวนช่องที่นี่
+
+// ===== สร้างช่องจอด =====
+var states = {};
+var lot = document.getElementById("lot");
+for (var i = 1; i <= SLOT_COUNT; i++) {
+  states[i] = "unknown";
+  lot.insertAdjacentHTML("beforeend",
+    '<div class="bay unknown" id="bay' + i + '">' +
+      '<span class="no">ช่อง ' + i + '</span>' +
+      '<div class="car"></div>' +
+      '<span class="label">รอข้อมูล</span>' +
+    '</div>');
+}
+document.getElementById("total").textContent = SLOT_COUNT;
+
+function render(n) {
+  var bay = document.getElementById("bay" + n);
+  var s = states[n];
+  bay.className = "bay " + s;
+  bay.querySelector(".label").textContent =
+    s === "free" ? "ว่าง" : s === "busy" ? "ไม่ว่าง" : "รอข้อมูล";
+  var free = 0, known = 0;
+  for (var k in states) { if (states[k] !== "unknown") known++; if (states[k] === "free") free++; }
+  document.getElementById("freeCount").textContent = known ? free : "-";
+}
+
+// ===== MQTT =====
+var statusEl = document.getElementById("status");
+var btn = document.getElementById("toggle");
+var connected = false;
+
+function setStatus(on, text) {
+  connected = on;
+  statusEl.textContent = text;
+  statusEl.className = on ? "on" : "";
+  btn.textContent = on ? "ตัดการเชื่อมต่อ" : "เชื่อมต่อ";
+  btn.disabled = false;
+}
+
+function resetSlots() {
+  for (var i = 1; i <= SLOT_COUNT; i++) { states[i] = "unknown"; render(i); }
+}
+
+var client = new Paho.MQTT.Client(BROKER, PORT, "web_" + Math.random().toString(16).slice(2, 10));
+
+client.onMessageArrived = function (msg) {
+  var n = parseInt(msg.destinationName.replace(BASE_TOPIC, ""), 10);
+  if (!states.hasOwnProperty(n)) return;
+  var text = msg.payloadString.trim().toLowerCase();
+  states[n] = text === "available" ? "free" : text === "occupied" ? "busy" : "unknown";
+  render(n);
+};
+
+client.onConnectionLost = function () {
+  setStatus(false, "หลุดการเชื่อมต่อ");
+  resetSlots();
+};
+
+function connect() {
+  btn.disabled = true;
+  statusEl.textContent = "กำลังเชื่อมต่อ…";
+  client.connect({
+    timeout: 5,
+    useSSL: true,                         // จำเป็นเมื่อโฮสต์บน GitHub Pages (https)
+    onSuccess: function () {
+      setStatus(true, "เชื่อมต่อแล้ว");
+      for (var i = 1; i <= SLOT_COUNT; i++) client.subscribe(BASE_TOPIC + i);
+    },
+    onFailure: function () {
+      setStatus(false, "เชื่อมต่อไม่ได้ กดเชื่อมต่อใหม่");
+    }
+  });
+}
+
+btn.addEventListener("click", function () {
+  if (connected) {
+    client.disconnect();
+    setStatus(false, "ยังไม่เชื่อมต่อ");
+    resetSlots();
+  } else {
+    connect();
+  }
+});
+</script>
+</body>
+</html>

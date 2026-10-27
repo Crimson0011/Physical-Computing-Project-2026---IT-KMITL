@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ข้อมูล | ที่จอดรถ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f3f2ee; --text: #1d2125; --muted: #6a7077;
+  --free: #3fb37f; --busy: #e5533d; --unknown: #8a8f94;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #16181a; --text: #ecebe6; --muted: #9aa0a6; }
+}
+* { box-sizing: border-box; margin: 0; }
+body {
+  font-family: "Noto Sans Thai", system-ui, sans-serif;
+  background: var(--bg); color: var(--text); line-height: 1.7;
+  padding: max(20px, env(safe-area-inset-top)) 16px max(20px, env(safe-area-inset-bottom));
+  max-width: 760px; margin: 0 auto;
+}
+nav { display: flex; gap: 6px; padding-bottom: 14px; margin-bottom: 18px; border-bottom: 1px solid rgba(128,128,128,.3); }
+nav a { color: var(--muted); text-decoration: none; font-weight: 600; padding: 6px 14px; border-radius: 8px; }
+nav a:hover { color: var(--text); }
+nav a[aria-current="page"] { background: var(--text); color: var(--bg); }
+nav a:focus-visible { outline: 3px solid var(--free); outline-offset: 2px; }
+h1 { font-size: 1.6rem; font-weight: 700; margin-bottom: 4px; }
+h2 { font-size: 1.15rem; font-weight: 700; margin: 26px 0 8px; }
+p, li { max-width: 62ch; }
+.lead { color: var(--muted); }
+ul { padding-left: 20px; }
+.legend { list-style: none; padding: 0; }
+.legend li { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.dot { width: 16px; height: 16px; border-radius: 50%; flex: none; }
+table { border-collapse: collapse; width: 100%; font-size: .95rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid rgba(128,128,128,.3); }
+code { font-family: ui-monospace, monospace; font-size: .9em; background: rgba(128,128,128,.18); padding: 1px 6px; border-radius: 4px; }
+.scroll { overflow-x: auto; }
+</style>
+</head>
+<body>
+<nav>
+  <a href="index.html">สถานะที่จอด</a>
+  <a href="info.html" aria-current="page">ข้อมูล</a>
+</nav>
+
+<h1>เกี่ยวกับระบบ</h1>
+<p class="lead">แบบจำลองที่จอดรถที่ตรวจว่าช่องจอดว่างหรือไม่ด้วยเซนเซอร์อัลตราโซนิก แล้วแสดงผลบนหน้าเว็บแบบเรียลไทม์</p>
+
+<h2>ความหมายของสี</h2>
+<ul class="legend">
+  <li><span class="dot" style="background: var(--free)"></span>ว่าง: ไม่มีรถในช่องจอด</li>
+  <li><span class="dot" style="background: var(--busy)"></span>ไม่ว่าง: มีรถจอดอยู่</li>
+  <li><span class="dot" style="background: var(--unknown)"></span>รอข้อมูล: ยังไม่ได้เชื่อมต่อ หรือบอร์ดยังไม่ส่งสถานะ</li>
+</ul>
+
+<h2>ระบบทำงานอย่างไร</h2>
+<ul>
+  <li>เซนเซอร์ HC-SR04 ที่แต่ละช่องวัดระยะถึงวัตถุตรงหน้า</li>
+  <li>ถ้าระยะใกล้กว่าค่าที่กำหนด บอร์ด Arduino ถือว่ามีรถ</li>
+  <li>บอร์ดส่งสถานะผ่าน MQTT ไปที่ broker เฉพาะตอนที่สถานะเปลี่ยน</li>
+  <li>หน้าเว็บรับสถานะจาก broker เดียวกันแล้วเปลี่ยนสีของช่องนั้น</li>
+</ul>
+
+<h2>ข้อมูลการเชื่อมต่อ</h2>
+<div class="scroll">
+<table>
+  <tr><th>ช่อง</th><th>topic</th><th>ข้อความที่ส่ง</th></tr>
+  <tr><td>1</td><td><code>phycom/68070245/slot1</code></td><td rowspan="4"><code>available</code> หรือ <code>occupied</code></td></tr>
+  <tr><td>2</td><td><code>phycom/68070245/slot2</code></td></tr>
+  <tr><td>3</td><td><code>phycom/68070245/slot3</code></td></tr>
+  <tr><td>4</td><td><code>phycom/68070245/slot4</code></td></tr>
+</table>
+</div>
+<p style="margin-top:10px" class="lead">Broker: <code>mqtt-dashboard.com</code> (หน้าเว็บใช้พอร์ต 8884 แบบเข้ารหัส บอร์ดใช้พอร์ต 1883)</p>
+
+<h2>ข้อควรรู้</h2>
+<ul>
+  <li>ต้องกดปุ่มเชื่อมต่อในหน้าสถานะที่จอดก่อน จึงจะเห็นข้อมูล</li>
+  <li>broker นี้เป็นแบบสาธารณะ ใครรู้ topic ก็ส่งข้อความเข้ามาได้ เหมาะกับงานทดลอง</li>
+</ul>
+</body>
+</html>
